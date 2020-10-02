@@ -63,7 +63,7 @@ def wait_for_api_training_job_success(job_id: Text, project_id: Text)->bool:
     logging.info(
         "Waiting for job to complete, polling status every %s sec.",
         _POLL_INTERVAL_IN_SECONDS)
-    while response["state"] not in ("SUCCEEDED", "FAILED"):
+    while response["state"] not in ("SUCCEEDED", "FAILED", "CANCELLED"):
         logging.info("Attempt number %s to retrieve job status.", counter)
         counter += 1
         time.sleep(_POLL_INTERVAL_IN_SECONDS)
@@ -74,6 +74,29 @@ def wait_for_api_training_job_success(job_id: Text, project_id: Text)->bool:
                       job_id, response["errorMessage"])
         return False
 
-    logging.info("AIP Training job %s succeeded.", job_id)
+    # Both CANCELLED and SUCCEEDED status count as successful completion.
+    logging.info("AIP Training job %s completed with status %s.",
+                 job_id, response["state"])
     return True
+
+
+def is_api_training_job_running(job_id: Text, project_id: Text)->bool:
+    """Non-blocking call that checks if AIP Training job is running.
+
+    Args:
+        job_id: ID for AIP training job.
+        project_id: Project under which the AIP Training job is running.
+    Returns:
+        True if the job is running, False if it has succeeded, failed, or it was
+        cancelled.
+    """
+    job_name = "projects/{}/jobs/{}".format(project_id, job_id)
+    api_client = discovery.build("ml", "v1")
+
+    logging.info("Retrieving status for job %s.", job_name)
+
+    request = api_client.projects().jobs().get(name=job_name)
+    response = request.execute()
+
+    return response["state"] not in ("SUCCEEDED", "FAILED", "CANCELLED")
 
